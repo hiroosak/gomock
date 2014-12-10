@@ -6,6 +6,20 @@ import (
 	"testing"
 )
 
+func TestStub(t *testing.T) {
+	Stub("/", func(req *http.Request) *http.Response {
+		r := &http.Response{
+			Status:     "200 OK",
+			StatusCode: http.StatusOK,
+		}
+		return r
+	})
+
+	if v := len(DefaultTransport.layers); v != 1 {
+		t.Errorf("len(DefaultTransport) == 1, but %v", v)
+	}
+}
+
 func TestRoundTrip(t *testing.T) {
 	handler := func(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
@@ -14,12 +28,12 @@ func TestRoundTrip(t *testing.T) {
 	defer server.Close()
 
 	transport := NewTransport()
-	transport.AddLayer(func(req *http.Request) (resp *http.Response, err error) {
+	transport.Stub("/", func(req *http.Request) *http.Response {
 		r := &http.Response{
 			Status:     "200 OK",
 			StatusCode: http.StatusOK,
 		}
-		return r, nil
+		return r
 	})
 
 	client := &http.Client{

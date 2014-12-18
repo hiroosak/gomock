@@ -3,8 +3,10 @@ package gomock
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"regexp"
+	"time"
 )
 
 type Handle func(req *http.Request) *http.Response
@@ -26,23 +28,22 @@ func NewTransport() *Transport {
 	}
 }
 
+func (t *Transport) RegisterProtocol(scheme string, rt http.RoundTripper) {
+}
+
+func (t *Transport) CloseIdleConnections() {
+}
+
+func (t *Transport) CancelRequest(req *http.Request) {
+}
+
+// Stub returns handle function.
 func (t *Transport) Stub(m interface{}, handle Handle) error {
 	l, err := newLayer(m, handle)
 	if err != nil {
 		return err
 	}
-	t.layers = append(DefaultTransport.layers, l)
-	return nil
-}
-
-var DefaultTransport = NewTransport()
-
-func Stub(m interface{}, handle Handle) error {
-	l, err := newLayer(m, handle)
-	if err != nil {
-		return err
-	}
-	DefaultTransport.layers = append(DefaultTransport.layers, l)
+	t.layers = append(t.layers, l)
 	return nil
 }
 
@@ -64,10 +65,40 @@ func newLayer(m interface{}, handle Handle) (Layer, error) {
 
 func (t *Transport) RoundTrip(req *http.Request) (resp *http.Response, err error) {
 	for _, l := range t.layers {
-		resp := l.HandleFunc(req)
-		if resp != nil {
-			return resp, err
+		if l.Pattern.MatchString(req.URL.String()) {
+			resp := l.HandleFunc(req)
+			if resp != nil {
+				return resp, err
+			}
 		}
 	}
 	return t.Transport.RoundTrip(req)
+}
+
+// HandleFunc returns a mock response object.
+func HandleFunc(statusCode int, body string) Handle {
+	return func(req *http.Request) *http.Response {
+		return &http.Response{
+			StatusCode: statusCode,
+			Body:       NewReadCloser(body),
+			Request:    req,
+		}
+	}
+}
+
+// DefaultTransport set to DefaultRansport.
+func SetDefaultTransport(t *Transport) {
+	http.DefaultTransport = t
+}
+
+// ResetDefaultTransport clear http.DefaultTransport.
+func ResetDefaultTransport() {
+	http.DefaultTransport = &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		Dial: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).Dial,
+		TLSHandshakeTimeout: 10 * time.Second,
+	}
 }

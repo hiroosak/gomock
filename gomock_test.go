@@ -1,21 +1,22 @@
 package gomock
 
 import (
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 )
 
 func TestStub(t *testing.T) {
-	Stub("/", func(req *http.Request) *http.Response {
+	transport := NewTransport()
+	transport.Stub("/", func(req *http.Request) *http.Response {
 		r := &http.Response{
-			Status:     "200 OK",
-			StatusCode: http.StatusOK,
+			StatusCode: http.StatusBadRequest,
 		}
 		return r
 	})
 
-	if v := len(DefaultTransport.layers); v != 1 {
+	if v := len(transport.layers); v != 1 {
 		t.Errorf("len(DefaultTransport) == 1, but %v", v)
 	}
 }
@@ -28,13 +29,7 @@ func TestRoundTrip(t *testing.T) {
 	defer server.Close()
 
 	transport := NewTransport()
-	transport.Stub("/", func(req *http.Request) *http.Response {
-		r := &http.Response{
-			Status:     "200 OK",
-			StatusCode: http.StatusOK,
-		}
-		return r
-	})
+	transport.Stub(".*", HandleFunc(http.StatusOK, "OK"))
 
 	client := &http.Client{
 		Transport: transport,
@@ -47,5 +42,17 @@ func TestRoundTrip(t *testing.T) {
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("got %v status code, want %v status code", resp.StatusCode, http.StatusOK)
+	}
+	if resp.Body == nil {
+		t.Errorf("failed")
+	}
+
+	bytes, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		t.Errorf("Failed ", err)
+	}
+
+	if string(bytes) != "OK" {
+		t.Errorf("got %v body, want %v body", string(bytes), "OK")
 	}
 }

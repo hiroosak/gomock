@@ -1,9 +1,12 @@
 package gomock
 
 import (
+	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"testing"
 )
 
@@ -80,4 +83,45 @@ func TestDefaultTransport(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("got %v status code, want %v status code", resp.StatusCode, http.StatusOK)
 	}
+}
+
+func ExampleStub() {
+	transport := NewTransport()
+	transport.Stub(`http://example.jp`, HandleFunc(http.StatusOK, "hello"))
+
+	client := &http.Client{
+		Transport: transport,
+	}
+	resp, err := client.Get(`http://example.jp`)
+	if err != nil {
+		log.Fatalln("error:", err)
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatalln("error:", err)
+	}
+	fmt.Println(string(body))
+	// Output: hello
+}
+
+func ExampleRegexpStub() {
+	transport := NewTransport()
+	transport.Stub(regexp.MustCompile(`/foo$`), HandleFunc(http.StatusOK, "foo"))
+	transport.Stub(regexp.MustCompile(`/bar$`), HandleFunc(http.StatusOK, "bar"))
+
+	client := &http.Client{
+		Transport: transport,
+	}
+	resp, err := client.Get(`http://example.jp/foo`)
+	if err != nil {
+		log.Fatalln("error:", err)
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatalln("error:", err)
+	}
+	fmt.Println(string(body))
+	// Output: foo
 }

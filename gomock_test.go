@@ -56,3 +56,28 @@ func TestRoundTrip(t *testing.T) {
 		t.Errorf("got %v body, want %v body", string(bytes), "OK")
 	}
 }
+
+func TestDefaultTransport(t *testing.T) {
+	handler := func(w http.ResponseWriter, req *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+	}
+	server := httptest.NewServer(http.HandlerFunc(handler))
+	defer server.Close()
+
+	transport := NewTransport()
+	transport.Stub(".*", HandleFunc(http.StatusOK, "OK"))
+
+	SetDefaultTransport(transport)
+	defer ResetDefaultTransport()
+
+	client := &http.Client{}
+
+	resp, err := client.Get(server.URL)
+	if err != nil {
+		t.Errorf("Failed ", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("got %v status code, want %v status code", resp.StatusCode, http.StatusOK)
+	}
+}

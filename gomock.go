@@ -4,21 +4,27 @@ package gomock
 import (
 	"fmt"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"regexp"
+	"sync"
 )
 
-type Handle func(req *http.Request) *http.Response
+var mutex *sync.Mutex = &sync.Mutex{}
 
+// Layer includes a multiplexer and domain pattern.
 type Layer struct {
-	Pattern    *regexp.Regexp
-	HandleFunc Handle
+	Pattern *regexp.Regexp
+	Mux     *http.ServeMux
 }
 
+// Transport implements http.RoundTripper.
 type Transport struct {
 	Transport http.RoundTripper
 	layers    []Layer
 }
 
+// NewTransport returns a new Transport, with matching url.
 func NewTransport() *Transport {
 	return &Transport{
 		Transport: http.DefaultTransport,
@@ -35,9 +41,9 @@ func (t *Transport) CloseIdleConnections() {
 func (t *Transport) CancelRequest(req *http.Request) {
 }
 
-// Stub returns handle function.
-func (t *Transport) Stub(m interface{}, handle Handle) error {
-	l, err := newLayer(m, handle)
+// Stub returns mux function.
+func (t *Transport) Stub(m interface{}, mux *http.ServeMux) error {
+	l, err := newLayer(m, mux)
 	if err != nil {
 		return err
 	}
@@ -45,41 +51,39 @@ func (t *Transport) Stub(m interface{}, handle Handle) error {
 	return nil
 }
 
-func newLayer(m interface{}, handle Handle) (Layer, error) {
+func newLayer(m interface{}, mux *http.ServeMux) (Layer, error) {
 	switch v := m.(type) {
 	case *regexp.Regexp:
 		return Layer{
-			Pattern:    v,
-			HandleFunc: handle,
+			Pattern: v,
+			Mux:     mux,
 		}, nil
 	case string:
 		return Layer{
-			Pattern:    regexp.MustCompile(v),
-			HandleFunc: handle,
+			Pattern: regexp.MustCompile(v),
+			Mux:     mux,
 		}, nil
 	}
 	return Layer{}, fmt.Errorf("invalid m %v", m)
 }
 
 func (t *Transport) RoundTrip(req *http.Request) (resp *http.Response, err error) {
+	mutex.Lock()
+	defer mutex.Unlock()
+
 	for _, l := range t.layers {
 		if l.Pattern.MatchString(req.URL.String()) {
-			resp := l.HandleFunc(req)
-			if resp != nil {
-				return resp, err
+			server := httptest.NewServer(l.Mux)
+			defer server.Close()
+
+			newReq, err := url.Parse(server.URL)
+			if err != nil {
+				return nil, err
 			}
+			newReq.Path = req.URL.Path
+			newReq.RawQuery = req.URL.Query().Encode()
+			req.URL = newReq
 		}
 	}
 	return t.Transport.RoundTrip(req)
-}
-
-// HandleFunc returns a mock response object.
-func HandleFunc(statusCode int, body string) Handle {
-	return func(req *http.Request) *http.Response {
-		return &http.Response{
-			StatusCode: statusCode,
-			Body:       NewReadCloser(body),
-			Request:    req,
-		}
-	}
 }

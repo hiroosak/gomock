@@ -1,3 +1,5 @@
+[![GoDoc](https://godoc.org/github.com/hiroosak/gomock?status.svg)](https://godoc.org/github.com/hiroosak/gomock)
+
 ## gomock
 
 Mocking http request.
